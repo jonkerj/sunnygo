@@ -1,12 +1,18 @@
-package pkg
+package webconnect
 
 import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/jonkerj/sunnygo/pkg/tree"
 )
 
-func (m *Meta) EnsureHierarchy(hierarchy []int, root *CategoryNode) error {
+type Nodifyable interface {
+	nodify(string, *Meta) (tree.Node, error)
+}
+
+func (m *Meta) ensureHierarchy(hierarchy []int, root *tree.CategoryNode) error {
 	parent := root
 	for _, categoryTag := range hierarchy {
 		r := parent.FindCategory(categoryTag)
@@ -19,19 +25,16 @@ func (m *Meta) EnsureHierarchy(hierarchy []int, root *CategoryNode) error {
 		if err != nil {
 			return fmt.Errorf("could not complete category tree due to missing translation: %v", err)
 		}
-		newCategory := &CategoryNode{
-			tag:      categoryTag,
-			name:     *translation,
-			children: []Node{},
-		}
-		parent.children = append(parent.children, newCategory)
+
+		newCategory := tree.NewCategoryNode(categoryTag, *translation)
+		parent.AddChild(newCategory)
 		parent = newCategory
 	}
 
 	return nil
 }
 
-func (i *IntValue) Nodify(tag string, meta *Meta) (Node, error) {
+func (i *IntValue) nodify(tag string, meta *Meta) (tree.Node, error) {
 	model, err := meta.GetModel(tag)
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
@@ -42,68 +45,53 @@ func (i *IntValue) Nodify(tag string, meta *Meta) (Node, error) {
 		return nil, fmt.Errorf("could not translation for tag %d: %w", model.TagId, err)
 	}
 
-	v := &ValueNode{
-		tag:   tag,
-		name:  *name,
-		unit:  nil,
-		value: nil,
-	}
+	n := tree.NewValueNode(tag, *name)
 
 	if model.Unit != nil {
 		unit, err := meta.GetTranslation(*model.Unit)
 		if err != nil {
 			return nil, fmt.Errorf("could not translation for unit %d: %w", *model.Unit, err)
 		}
-		v.unit = unit
+		n.SetUnit(unit)
 	}
 
-	val := float64(i.Val) * (*model.Scale)
-	v.value = &val
-
-	return v, nil
-}
-
-func (s *StringValue) Nodify(tag string, meta *Meta) (Node, error) {
-	model, err := meta.GetModel(tag)
-	if err != nil {
-		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
-	}
-
-	name, err := meta.GetTranslation(model.TagId)
-	if err != nil {
-		return nil, fmt.Errorf("could not translation for tag %d: %w", model.TagId, err)
-	}
-
-	t := &TextNode{
-		tag:  tag,
-		name: *name,
-		text: s.Val,
-	}
-
-	return t, nil
-}
-
-func (d *DurationValue) Nodify(tag string, meta *Meta) (Node, error) {
-	model, err := meta.GetModel(tag)
-	if err != nil {
-		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
-	}
-
-	name, err := meta.GetTranslation(model.TagId)
-	if err != nil {
-		return nil, fmt.Errorf("could not translation for tag %d: %w", model.TagId, err)
-	}
-
-	n := &DurationNode{
-		tag:      tag,
-		name:     *name,
-		duration: time.Duration(d.Val) * time.Second,
-	}
+	n.SetValue(float64(i.Val) * (*model.Scale))
 
 	return n, nil
 }
 
-func (t *TagListValue) Nodify(tag string, meta *Meta) (Node, error) {
+func (s *StringValue) nodify(tag string, meta *Meta) (tree.Node, error) {
+	model, err := meta.GetModel(tag)
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
+	}
+
+	name, err := meta.GetTranslation(model.TagId)
+	if err != nil {
+		return nil, fmt.Errorf("could not translation for tag %d: %w", model.TagId, err)
+	}
+
+	n := tree.NewTextNode(tag, *name, s.Val)
+	return n, nil
+}
+
+func (d *DurationValue) nodify(tag string, meta *Meta) (tree.Node, error) {
+	model, err := meta.GetModel(tag)
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
+	}
+
+	name, err := meta.GetTranslation(model.TagId)
+	if err != nil {
+		return nil, fmt.Errorf("could not translation for tag %d: %w", model.TagId, err)
+	}
+
+	n := tree.NewDurationNode(tag, *name, time.Duration(d.Val)*time.Second)
+
+	return n, nil
+}
+
+func (t *TagListValue) nodify(tag string, meta *Meta) (tree.Node, error) {
 	model, err := meta.GetModel(tag)
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
@@ -123,25 +111,19 @@ func (t *TagListValue) Nodify(tag string, meta *Meta) (Node, error) {
 		return nil, fmt.Errorf("could not retrieve model for tag %s: %w", tag, err)
 	}
 
-	n := &TextNode{
-		tag:  tag,
-		name: *name,
-		text: *text,
-	}
+	n := tree.NewTextNode(tag, *name, *text)
 
 	return n, nil
 }
 
-func (m *Meta) NodifyAllValues(deviceId string, response *ResultReponse) (*CategoryNode, error) {
+func NodifyAllValues(deviceId string, m *Meta, response *ResultReponse) (*tree.CategoryNode, error) {
 	fields, ok := response.Result[deviceId]
 	if !ok {
 		return nil, fmt.Errorf("device %s not found in values", deviceId)
 	}
 
-	root := &CategoryNode{
-		name:     "root",
-		children: []Node{},
-	}
+	rootName := "root"
+	root := tree.NewCategoryNode(0, rootName)
 
 	for tag, field := range fields {
 		model, err := m.GetModel(tag)
@@ -173,12 +155,12 @@ func (m *Meta) NodifyAllValues(deviceId string, response *ResultReponse) (*Categ
 			if err := json.Unmarshal(*field["1"][0], intf); err != nil {
 				return nil, fmt.Errorf("error de-marshalling value %s: %v", tag, err)
 			}
-			n, err := intf.Nodify(tag, m)
+			n, err := intf.nodify(tag, m)
 			if err != nil {
 				return nil, fmt.Errorf("error nodifying value %s: %w", tag, err)
 			}
 
-			m.EnsureHierarchy(model.TagHierarchy, root)
+			m.ensureHierarchy(model.TagHierarchy, root)
 			categoryTag := model.TagHierarchy[len(model.TagHierarchy)-1]
 			category := root.FindCategory(categoryTag)
 			if category == nil {

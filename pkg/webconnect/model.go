@@ -1,4 +1,4 @@
-package pkg
+package webconnect
 
 import (
 	"encoding/json"

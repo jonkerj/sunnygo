@@ -1,4 +1,4 @@
-package pkg
+package webconnect
 
 import (
 	"bytes"
@@ -29,10 +29,6 @@ type SubFields map[string]ValueList
 type Fields map[string]SubFields
 type ResultReponse struct {
 	Result map[string]Fields `json:"result"`
-}
-
-type Nodifyable interface {
-	Nodify(string, *Meta) (Node, error)
 }
 
 type IntValue struct {
@@ -132,14 +128,14 @@ func (w *WebConnect) http(uri string, method string, data *map[string]string, re
 	return nil
 }
 
-func (s *WebConnect) Login(right, password string) error {
+func (w *WebConnect) Login(right, password string) error {
 	var data = map[string]string{
 		"right": right,
 		"pass":  password,
 	}
 
 	resp := AuthResponse{}
-	err := s.http("/dyn/login.json", "POST", &data, &resp)
+	err := w.http("/dyn/login.json", "POST", &data, &resp)
 	if err != nil {
 		return fmt.Errorf("error logging in: %v", err)
 	}
@@ -150,16 +146,16 @@ func (s *WebConnect) Login(right, password string) error {
 		return errors.New("could not get session ID from API")
 	}
 
-	s.session = resp.Result.Sid
+	w.session = resp.Result.Sid
 
 	return nil
 }
 
-func (s *WebConnect) Logout() error {
-	if s.session != nil {
+func (w *WebConnect) Logout() error {
+	if w.session != nil {
 		fmt.Printf("Logging out")
 		resp := AuthResponse{}
-		err := s.http("/dyn/logout.json", "POST", nil, &resp)
+		err := w.http("/dyn/logout.json", "POST", nil, &resp)
 		if err != nil {
 			fmt.Printf("error logging out: %v\n", err)
 			return fmt.Errorf("error logging out: %v", err)
@@ -174,13 +170,13 @@ func (s *WebConnect) Logout() error {
 	return nil
 }
 
-func (s *WebConnect) CheckSession() (bool, error) {
-	if s.session == nil {
+func (w *WebConnect) CheckSession() (bool, error) {
+	if w.session == nil {
 		return false, nil
 	}
 
 	resp := SessionCheckResponse{}
-	err := s.http("/dyn/sessionCheck.json", "POST", nil, &resp)
+	err := w.http("/dyn/sessionCheck.json", "POST", nil, &resp)
 	if err != nil {
 		return false, fmt.Errorf("error checking session: %v", err)
 	}
