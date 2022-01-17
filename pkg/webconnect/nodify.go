@@ -12,26 +12,28 @@ type Nodifyable interface {
 	nodify(string, *Meta) (tree.Node, error)
 }
 
-func (m *Meta) ensureHierarchy(hierarchy []int, root *tree.CategoryNode) error {
+func (m *Meta) ensureHierarchy(hierarchy []int, root *tree.CategoryNode) (*tree.CategoryNode, error) {
 	parent := root
 	for _, categoryTag := range hierarchy {
-		r := parent.FindCategory(categoryTag)
+		r := parent.GetCategory(categoryTag)
 		if r != nil {
+			parent = r
 			continue
+		} else {
+			// this category is not yet present in the tree. Create the node
+			translation, err := m.GetTranslation(categoryTag)
+			if err != nil {
+				return nil, fmt.Errorf("could not complete category tree due to missing translation: %v", err)
+			}
+
+			newCategory := tree.NewCategoryNode(categoryTag, *translation)
+			parent.AddChild(newCategory)
+			parent = newCategory
 		}
 
-		// this category is not yet present in the tree. Create the node
-		translation, err := m.GetTranslation(categoryTag)
-		if err != nil {
-			return fmt.Errorf("could not complete category tree due to missing translation: %v", err)
-		}
-
-		newCategory := tree.NewCategoryNode(categoryTag, *translation)
-		parent.AddChild(newCategory)
-		parent = newCategory
 	}
 
-	return nil
+	return parent, nil
 }
 
 func (i *IntValue) nodify(tag string, meta *Meta) (tree.Node, error) {
@@ -161,11 +163,12 @@ func NodifyAllValues(deviceId string, m *Meta, response *ResultReponse) (*tree.C
 				return nil, fmt.Errorf("error nodifying value %s: %w", tag, err)
 			}
 
-			m.ensureHierarchy(model.TagHierarchy, root)
-			categoryTag := model.TagHierarchy[len(model.TagHierarchy)-1]
-			category := root.FindCategory(categoryTag)
+			category, err := m.ensureHierarchy(model.TagHierarchy, root)
+			if err != nil {
+				return nil, fmt.Errorf("error retrieving category node: %w", err)
+			}
 			if category == nil {
-				return nil, fmt.Errorf("could not find category %d in tree", categoryTag)
+				return nil, fmt.Errorf("could not create hierarchy %s in tree", model.TagHierarchy)
 			}
 			category.AddChild(n)
 		}

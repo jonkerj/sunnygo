@@ -24,18 +24,14 @@ func (c CategoryNode) Children() []Node {
 	return c.children
 }
 
-func (c *CategoryNode) FindCategory(tag int) *CategoryNode {
-	if c.tag == tag {
-		return c
-	}
+func (c *CategoryNode) GetCategory(tag int) *CategoryNode {
 	for _, child := range c.children {
 		catChild, ok := child.(*CategoryNode)
 		if !ok {
 			continue
 		}
-		r := catChild.FindCategory(tag)
-		if r != nil {
-			return r
+		if catChild.tag == tag {
+			return catChild
 		}
 	}
 	return nil
