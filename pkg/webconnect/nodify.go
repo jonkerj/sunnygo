@@ -103,7 +103,8 @@ func (t *TagListValue) nodify(tag string, meta *Meta) (tree.Node, error) {
 	}
 
 	if len(t.Val) == 0 {
-		return nil, fmt.Errorf("there are no tags in this result")
+		n := tree.NewTextNode(tag, *name, "n/a")
+		return n, nil
 	}
 
 	text, err := meta.GetTranslation(t.Val[0].Tag)
