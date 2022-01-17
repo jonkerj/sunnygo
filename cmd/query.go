@@ -40,7 +40,7 @@ func query(cmd *cobra.Command, args []string) {
 		panic(err)
 	}
 
-	root, err := webconnect.NodifyAllValues("0199-xxxxx1A5", meta, vr)
+	root, err := webconnect.NodifyAllValues(viper.GetString("device"), meta, vr)
 	if err != nil {
 		panic(err)
 	}

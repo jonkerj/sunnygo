@@ -22,6 +22,7 @@ func init() {
 	flags.String("url", "https://sunnyboy.local", "URL to Sunnboy")
 	flags.String("right", "usr", "Permission level/username")
 	flags.String("password", "", "Password")
+	flags.String("device", "", "Device ID")
 	viper.BindPFlags(flags)
 }
 
